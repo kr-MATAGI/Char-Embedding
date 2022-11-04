@@ -38,14 +38,14 @@ class ELMoDatasets(Dataset):
         return len(self.sentences)
 
     def __getitem__(self, idx):
-        X = [char_dic["[CLS]"]]
+        X = []
         y = []
         valid_seq_len = []
         for c_idx in range(0, len(self.sentences[idx]) - 1):
             X.append(char_dic[self.sentences[idx][c_idx]])
             y.append(char_dic[self.sentences[idx][c_idx + 1]])
-        X.append(char_dic["[SEP]"])
-        y.append(char_dic["[SEP]"])
+        # X.append()
+        y.append("[BOS]")
         # y_reverse = list(reversed(y))
         valid_seq_len.append(len(X))
         valid_seq_len = [l if l < self.seq_len else self.seq_len for l in valid_seq_len]
@@ -112,9 +112,10 @@ def make_char_dict(sentences: List[str]):
         char_set.append(add_ch)
 
     char_set = list(set(char_set))
-    char_set.insert(1, "[CLS]")
-    char_set.insert(2, "[SEP]")
-    char_set.insert(3, "[UNK]")
+    # char_set.insert(1, "[CLS]")
+    # char_set.insert(2, "[SEP]")
+    # char_set.insert(3, "[UNK]")
+    char_set.insert(1, "[BOS]")
     char_set.insert(0, "[PAD]")
     char_dic = {c: i for i, c in enumerate(char_set)}
     vocab_size = len(char_dic)

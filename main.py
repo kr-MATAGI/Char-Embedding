@@ -166,15 +166,11 @@ def evaluate(model, eval_datasets, device, batch_size: int = 128):
             loss = criterion(outputs.view(-1, vocab_size), y.view(-1))
             eval_loss += loss.mean().item()
             nb_eval_steps += 1
-            perplexity = torch.exp(f_loss+b_loss).item()
+            perplexity = torch.exp(loss).item()
             eval_pbar.set_description("Eval Loss - %.04f, PPL: %.04f" % ((eval_loss / nb_eval_steps), perplexity))
 
-            f_results = outputs[0].argmax(dim=-1)
-            b_results = outputs[1].argmax(dim=-1)
-            for r_idx, res in enumerate(f_results):
-                predict_str = "".join([char_set[x] for x in res])
-                print(f"{r_idx}: \n {predict_str}")
-            for r_idx, res in enumerate(b_results):
+            results = outputs[0].argmax(dim=-1)
+            for r_idx, res in enumerate(results):
                 predict_str = "".join([char_set[x] for x in res])
                 print(f"{r_idx}: \n {predict_str}")
 

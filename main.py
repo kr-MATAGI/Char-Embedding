@@ -169,7 +169,7 @@ def evaluate(model, eval_datasets, device, batch_size: int = 128):
             perplexity = torch.exp(loss).item()
             eval_pbar.set_description("Eval Loss - %.04f, PPL: %.04f" % ((eval_loss / nb_eval_steps), perplexity))
 
-            results = outputs[0].argmax(dim=-1)
+            results = outputs.argmax(dim=-1)
             for r_idx, res in enumerate(results):
                 predict_str = "".join([char_set[x] for x in res])
                 print(f"{r_idx}: \n {predict_str}")

@@ -42,10 +42,10 @@ class ELMoDatasets(Dataset):
         y = []
         valid_seq_len = []
         for c_idx in range(0, len(self.sentences[idx]) - 1):
-            X.append(char_dic[self.sentences[idx][c_idx]])
-            y.append(char_dic[self.sentences[idx][c_idx + 1]])
-        # X.append()
-        y.append(char_dic["[BOS]"] )
+            X.append(char_dic[self.sentences[idx][c_idx:c_idx+1]])
+            y.append(char_dic[self.sentences[idx][c_idx + 2]])
+
+        y.append(char_dic["[BOS]"])
         # y_reverse = list(reversed(y))
         valid_seq_len.append(len(X))
         valid_seq_len = [l if l < self.seq_len else self.seq_len for l in valid_seq_len]
@@ -134,7 +134,8 @@ def load_sentences_datasets(src_path: str) -> List[str]:
 
     total_sents = []
     for sent in load_src_datasets:
-        total_sents.append(sent.text.replace(" ", "_"))
+        if 10 <= len(sent):
+            total_sents.append(sent.text.replace(" ", "_"))
     split_size = int(len(total_sents) * 0.1)
     train_idx = split_size * 7
     dev_idx = train_idx + split_size

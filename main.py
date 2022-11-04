@@ -45,7 +45,7 @@ class ELMoDatasets(Dataset):
             X.append(char_dic[self.sentences[idx][c_idx]])
             y.append(char_dic[self.sentences[idx][c_idx + 1]])
         # X.append()
-        y.append("[BOS]")
+        y.append(char_dic["[BOS]"] )
         # y_reverse = list(reversed(y))
         valid_seq_len.append(len(X))
         valid_seq_len = [l if l < self.seq_len else self.seq_len for l in valid_seq_len]

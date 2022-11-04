@@ -4,12 +4,40 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 #====================================================
+class Highway(nn.Module):
+#====================================================
+    def __init__(self, size, num_layers, f):
+        super(Highway, self).__init__()
+        self.num_layers = num_layers
+        self.nonlinear = nn.ModuleList([nn.Linear(size, size) for _ in range(num_layers)])
+        self.linear = nn.ModuleList([nn.Linear(size, size) for _ in range(num_layers)])
+        self.gate = nn.ModuleList([nn.Linear(size, size) for _ in range(num_layers)])
+        self.f = f
+
+    def forward(self, x):
+        """
+            :param x: tensor with shape of [batch_size, size]
+            :return: tensor with shape of [batch_size, size]
+            applies σ(x) ⨀ (f(G(x))) + (1 - σ(x)) ⨀ (Q(x)) transformation | G and Q is affine transformation,
+            f is non-linear transformation, σ(x) is affine transformation with sigmoid non-linearition
+            and ⨀ is element-wise multiplication
+            """
+
+        for layer in range(self.num_layers):
+            gate = F.sigmoid(self.gate[layer](x))
+            nonlinear = self.f(self.nonlinear[layer](x))
+            linear = self.linear[layer](x)
+
+            x = gate * nonlinear + (1 - gate) * linear
+        return x
+
+#====================================================
 class CharELMo(nn.Module):
 #====================================================
     def __init__(self,
                  vocab_size: int,
                  embed_size: int = 512,
-                 hidden_size: int = 768,
+                 hidden_size: int = 512,
                  dropout_rate: float = 0.1,
                  max_seq_len: int = 128
                  ):
@@ -20,8 +48,11 @@ class CharELMo(nn.Module):
         self.max_seq_len = max_seq_len
 
         # Char Embedding
-        # 문자당 임베딩 생성
+        # 문자 단위로 이루어진 문장
         self.embedding = nn.Embedding(vocab_size, embed_size) # [batch, seq_len, embed_dim]
+
+        # Highway Netwrok
+        self.highway = Highway(num_layers=2, size=512, f=nn.ReLU())
 
         # biLM
         self.forward_lm = nn.LSTM(input_size=embed_size, hidden_size=hidden_size,
@@ -34,10 +65,11 @@ class CharELMo(nn.Module):
         self.dropout = nn.Dropout(dropout_rate)
 
         # Softmax + FFN
-        self.classifier = nn.Linear(hidden_size, vocab_size)
+        self.classifier = nn.Linear(hidden_size * 2, vocab_size)
 
     def forward(self, x: torch.Tensor, seq_len: torch.Tensor):
         char_embed = self.embedding(x) # [batch_size, seq_len(char)]
+        char_embed = self.highway(char_embed)
 
         reverse_char_embed = char_embed.flip(dims=[0, 1])
         input_len, sorted_idx = seq_len.sort(0, descending=True)

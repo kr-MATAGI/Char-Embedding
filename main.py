@@ -158,7 +158,7 @@ def evaluate(model, eval_datasets, device, batch_size: int = 128):
     for batch in eval_pbar:
         model.eval()
         with torch.no_grad():
-            X, y = batch
+            X, y, valid_seq_len = batch
             X = X.to(device)
             y = y.to(device)
             valid_seq_len = valid_seq_len.to(device)

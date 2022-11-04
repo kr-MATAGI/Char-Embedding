@@ -134,7 +134,7 @@ def load_sentences_datasets(src_path: str) -> List[str]:
 
     total_sents = []
     for sent in load_src_datasets:
-        if 10 <= len(sent):
+        if 10 <= len(sent.text):
             total_sents.append(sent.text.replace(" ", "_"))
     split_size = int(len(total_sents) * 0.1)
     train_idx = split_size * 7

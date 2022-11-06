@@ -178,7 +178,7 @@ def evaluate(model, eval_datasets, device, batch_size: int = 128):
 
 ### Main ###
 if "__main__" == __name__:
-    print("[main.py] __main__")
+    print("[run_elmo.py] __main__")
 
     # Datasets
     train_sents, dev_sents, test_sents = load_sentences_datasets("./NIKL_ne_parsed.pkl")

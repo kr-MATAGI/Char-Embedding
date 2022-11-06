@@ -2,14 +2,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 #====================================================
 class CharCNN(nn.Module):
 #====================================================
     def __init__(self):
         super(CharCNN, self).__init__()
 
-        self.num_features = 0
+        self.num_features = 5
         self.drop_prob = 0.1
 
         self.conv1 = nn.Sequential(

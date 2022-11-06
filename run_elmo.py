@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import re
 
 import copy
 import numpy as np
@@ -68,7 +69,7 @@ class ELMoDatasets(Dataset):
 
 #======================================================
 def kor_letter_from(letter):
-#=========================================b=============
+#======================================================
     lastLetterInt = 15572643
 
     if not letter:

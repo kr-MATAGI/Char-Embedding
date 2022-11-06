@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import re
+import unicodedata
 
 import copy
 import numpy as np
@@ -124,8 +125,31 @@ def make_jamo_one_hot(vocab_dict: Dict[str, int], vocab_size: int, sent: str = "
 
     return chars_one_hot
 
+#======================================================
+def make_char_dict(sentences: List[str]):
+#======================================================
+    print(f"[make_char_dict] sent.len: {len(sentences)}")
+
+    char_set = []
+    for sent in sentences:
+        for ch in list(sent):
+            unicodename = unicodedata.name(ch)
+            if re.search(r"[가-힣a-zA-Z0-9]+", ch) or unicodename.startswith("CJK")\
+                    or unicodename.startswith("KATAKANA") or unicodename.startswith("HANGUL") or \
+                    unicodename.startswith("SOFT") or unicodename.startswith("HIRAGANA"):
+                continue
+            else:
+                char_set.append(str(ch))
+    char_set = sorted(list(set(char_set)))
+    print(sorted(list(set(char_set))))
+    print(len(char_set))
+
 
 if "__main__" == __name__:
+    train_sents, dev_sents, test_sents = load_sentences_datasets("./NIKL_ne_parsed.pkl")
+    total_sents = train_sents + dev_sents + test_sents  # List
+    add_dict_items = make_char_dict(total_sents)
+
     all_hangul = []
     add_ch = ''
     while True:
@@ -134,21 +158,19 @@ if "__main__" == __name__:
             break
         all_hangul.append(add_ch)
     hangul_comp_list = split_hangul_components(all_hangul)
+
     char_dic = {c: i for i, c in enumerate(hangul_comp_list)}
     vocab_size = len(char_dic)
     print("Char Dict: ", char_dic)
     print("Vocab Size: ", vocab_size)
 
-    train_sents, dev_sents, test_sents = load_sentences_datasets("./NIKL_ne_parsed.pkl")
-    total_sents = train_sents + dev_sents + test_sents  # List
-
     jamo_inputs = []
     for sent in dev_sents:
         jamo_one_hot = make_jamo_one_hot(vocab_dict=char_dic, vocab_size=vocab_size, sent=sent)
         jamo_inputs.append(jamo_one_hot)
-        break
     jamo_inputs = torch.FloatTensor(jamo_inputs) # [batch_siz, seq_len, 초/중/종성, vocab_size]
     model = CharCNN(vocab_dict=char_dic, vocab_size=vocab_size, seq_len=128)
+    model.train()
     outputs = model(jamo_inputs)
 
     print("[run_cnn.py] __main__")

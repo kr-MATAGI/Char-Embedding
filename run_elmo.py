@@ -169,12 +169,14 @@ def evaluate(model, eval_datasets, device, batch_size: int = 128):
             y = y.to(device)
             y_reverse = y_reverse.to(device)
             valid_seq_len = valid_seq_len.to(device)
-            f_logits, b_logits = model(X, valid_seq_len)
+            # f_logits, b_logits = model(X, valid_seq_len)
+            f_logits = model(X, valid_seq_len)
             f_loss = criterion(f_logits.view(-1, vocab_size), y.view(-1))
-            b_loss = criterion(b_logits.view(-1, vocab_size), y_reverse.view(-1))
-            eval_loss += f_loss.mean().item() + b_loss.mean().item()
+            # b_loss = criterion(b_logits.view(-1, vocab_size), y_reverse.view(-1))
+            eval_loss += f_loss.mean().item() # + b_loss.mean().item()
             nb_eval_steps += 1
-            perplexity = torch.exp(f_loss + b_loss).item()
+            # perplexity = torch.exp(f_loss + b_loss).item()
+            perplexity = torch.exp(f_loss).item()
             eval_pbar.set_description("Eval Loss - %.04f, PPL: %.04f" % ((eval_loss / nb_eval_steps), perplexity))
 
             results = f_logits.argmax(dim=-1)
@@ -226,10 +228,11 @@ if "__main__" == __name__:
             y = y.to(device)
             y_reverse = y_reverse.to(device)
             valid_seq_len = valid_seq_len.to(device)
-            f_logits, b_logits = model(X, valid_seq_len)
+            # f_logits, b_logits = model(X, valid_seq_len)
+            f_logits = model(X, valid_seq_len)
             f_loss = criterion(f_logits.view(-1, vocab_size), y.view(-1))
-            b_loss = criterion(b_logits.view(-1, vocab_size), y_reverse.view(-1))
-            total_loss = f_loss + b_loss
+            # b_loss = criterion(b_logits.view(-1, vocab_size), y_reverse.view(-1))
+            total_loss = f_loss #+ b_loss
             total_loss.backward()
             train_loss += total_loss.item()
             train_step += 1

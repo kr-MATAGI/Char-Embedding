@@ -78,18 +78,18 @@ class CharELMo(nn.Module):
         input_len = input_len.squeeze(1)
         # input_seq2idx = seq_len[sorted_idx]
 
-        packed_char_emb = pack_padded_sequence(char_embed, input_len.tolist(), batch_first=True)
-        packed_reverse_char_embed = pack_padded_sequence(reverse_char_embed, input_len.tolist(), batch_first=True)
+        # packed_char_emb = pack_padded_sequence(char_embed, input_len.tolist(), batch_first=True)
+        # packed_reverse_char_embed = pack_padded_sequence(reverse_char_embed, input_len.tolist(), batch_first=True)
 
         # BiLSTM - 1
-        f_lm_out, f_h = self.forward_lm(packed_char_emb)
-        f_lm_out, f_lm_out_len = pad_packed_sequence(f_lm_out, batch_first=True,
-                                                     padding_value=0, total_length=self.max_seq_len)
+        f_lm_out, f_h = self.forward_lm(char_embed)
+        # f_lm_out, f_lm_out_len = pad_packed_sequence(f_lm_out, batch_first=True,
+        #                                              padding_value=0, total_length=self.max_seq_len)
         f_lm_out = self.dropout(f_lm_out)
 
-        b_lm_out, b_h = self.backward_lm(packed_reverse_char_embed)
-        b_lm_out, b_lm_out_len = pad_packed_sequence(b_lm_out, batch_first=True,
-                                                     padding_value=0, total_length=self.max_seq_len)
+        b_lm_out, b_h = self.backward_lm(reverse_char_embed)
+        # b_lm_out, b_lm_out_len = pad_packed_sequence(b_lm_out, batch_first=True,
+        #                                              padding_value=0, total_length=self.max_seq_len)
         b_lm_out = self.dropout(b_lm_out)
         # concat_out = torch.concat([char_embed, f_lm_out, b_lm_out], -1)
         concat_out = torch.concat([f_lm_out, b_lm_out], -1)

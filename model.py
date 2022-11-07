@@ -36,8 +36,8 @@ class CharELMo(nn.Module):
 #====================================================
     def __init__(self,
                  vocab_size: int,
-                 embed_size: int = 2048,
-                 hidden_size: int = 4096,
+                 embed_size: int = 1024,
+                 hidden_size: int = 768,
                  dropout_rate: float = 0.1,
                  max_seq_len: int = 128
                  ):
@@ -65,11 +65,12 @@ class CharELMo(nn.Module):
         self.dropout = nn.Dropout(dropout_rate)
 
         # Softmax + FFN
-        self.classifier = nn.Linear(hidden_size * 2, vocab_size)
+        self.f_classifier = nn.Linear(hidden_size, vocab_size)
+        self.b_classifier = nn.Linear(hidden_size, vocab_size)
 
     def forward(self, x: torch.Tensor, seq_len: torch.Tensor):
         char_embed = self.embedding(x) # [batch_size, seq_len(char)]
-        char_embed = self.highway(char_embed)
+        # char_embed = self.highway(char_embed)
 
         reverse_char_embed = char_embed.flip(dims=[0, 1])
         input_len, sorted_idx = seq_len.sort(0, descending=True)
@@ -90,10 +91,10 @@ class CharELMo(nn.Module):
                                                      padding_value=0, total_length=self.max_seq_len)
         b_lm_out = self.dropout(b_lm_out)
         # concat_out = torch.concat([char_embed, f_lm_out, b_lm_out], -1)
-        concat_out = torch.concat([f_lm_out, b_lm_out], -1)
+        # concat_out = torch.concat([f_lm_out, b_lm_out], -1)
 
         # Softmax + FFN
-        logits = self.classifier(concat_out)
-        logits = F.softmax(logits, -1)
+        f_logits = self.f_classifier(f_lm_out)
+        b_logits = self.b_classifier(b_lm_out)
 
-        return logits
+        return f_logits, b_logits

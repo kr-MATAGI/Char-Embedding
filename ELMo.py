@@ -24,7 +24,7 @@ class ELMo(nn.Module):
         self.bilms = BidirectionalLanguageModel(hid_dim, hid_dim, n_layers, dropout)
 
         self.predict = nn.Linear(hid_dim, output_dim)
-        self.softmax = nn.LogSoftmax(dim=-1)
+        # self.softmax = nn.LogSoftmax(dim=-1)
 
     def forward(self, x: torch.Tensor):
         r"""

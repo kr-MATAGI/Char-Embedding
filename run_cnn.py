@@ -172,7 +172,7 @@ if "__main__" == __name__:
         jamo_one_hot = make_jamo_one_hot(vocab_dict=char_dic, vocab_size=vocab_size, sent=sent)
         jamo_inputs.append(jamo_one_hot)
     jamo_inputs = torch.FloatTensor(jamo_inputs) # [batch_siz, seq_len, 초/중/종성, vocab_size]
-    model = CharCNN(vocab_dict=char_dic, vocab_size=vocab_size, seq_len=128)
+    model = CharELMo(vocab_dict=char_dic, vocab_size=vocab_size, seq_len=128)
     model.train()
     outputs = model(jamo_inputs)
 

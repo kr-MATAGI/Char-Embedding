@@ -47,7 +47,7 @@ class ELMoDatasets(Dataset):
             y.append(char_dic[self.sentences[idx][c_idx+1]])
 
         y.append(char_dic["[BOS]"])
-        # y_reverse = list(reversed(y))
+        y_reverse = list(reversed(y))
         valid_seq_len.append(len(X))
         valid_seq_len = [l if l < self.seq_len else self.seq_len for l in valid_seq_len]
 
@@ -55,17 +55,20 @@ class ELMoDatasets(Dataset):
             X = X[:self.seq_len]
         else:
             X += [0] * (self.seq_len - len(X))
+
         if len(y) >= self.seq_len:
             y = y[:self.seq_len]
-            # y_reverse = y_reverse[:self.seq_len]
+            y_reverse = y_reverse[:self.seq_len]
         else:
             y += [0] * (self.seq_len - len(y))
-            # y_reverse += [0] * (self.seq_len - len(y_reverse))
+            y_reverse += [0] * (self.seq_len - len(y_reverse))
+
         X = torch.LongTensor(X)
         y = torch.LongTensor(y)
-        # y_reverse = torch.LongTensor(y_reverse)
+        y_reverse = torch.LongTensor(y_reverse)
+
         valid_seq_len = torch.IntTensor(valid_seq_len)
-        return X, y, valid_seq_len
+        return X, y, y_reverse, valid_seq_len
 
 #======================================================
 def kor_letter_from(letter):
@@ -115,7 +118,7 @@ def make_char_dict(sentences: List[str]):
     char_set = list(set(char_set))
     # char_set.insert(1, "[CLS]")
     # char_set.insert(2, "[SEP]")
-    # char_set.insert(3, "[UNK]")
+    char_set.insert(2, "[UNK]")
     char_set.insert(1, "[BOS]")
     char_set.insert(0, "[PAD]")
     char_dic = {c: i for i, c in enumerate(char_set)}
@@ -161,13 +164,15 @@ def evaluate(model, eval_datasets, device, batch_size: int = 128):
     for batch in eval_pbar:
         model.eval()
         with torch.no_grad():
-            X, y, valid_seq_len = batch
+            X, y, y_reverse, valid_seq_len = batch
             X = X.to(device)
             y = y.to(device)
+            y_reverse = y_reverse.to(device)
             valid_seq_len = valid_seq_len.to(device)
-            outputs = model(X, valid_seq_len)
-            loss = criterion(outputs.view(-1, vocab_size), y.view(-1))
-            eval_loss += loss.mean().item()
+            f_logits, b_logits = model(X, valid_seq_len)
+            f_loss = criterion(f_logits.view(-1, vocab_size), y.view(-1))
+            b_loss = criterion(b_logits.view(-1, vocab_size), y_reverse.view(-1))
+            eval_loss += f_loss.mean().item() + b_loss.mean().item()
             nb_eval_steps += 1
             perplexity = torch.exp(loss).item()
             eval_pbar.set_description("Eval Loss - %.04f, PPL: %.04f" % ((eval_loss / nb_eval_steps), perplexity))
@@ -216,14 +221,17 @@ if "__main__" == __name__:
         train_pbar = tqdm(train_data_loader)
         for batch_idx, samples in enumerate(train_pbar):
             model.train()
-            X, y, valid_seq_len = samples
+            X, y, y_reverse, valid_seq_len = samples
             X = X.to(device)
             y = y.to(device)
+            y_reverse = y_reverse.to(device)
             valid_seq_len = valid_seq_len.to(device)
-            outputs = model(X, valid_seq_len)
-            loss = criterion(outputs.view(-1, vocab_size), y.view(-1))
-            loss.backward()
-            train_loss += loss.item()
+            f_logits, b_logits = model(X, valid_seq_len)
+            f_loss = criterion(f_logits.view(-1, vocab_size), y.view(-1))
+            b_loss = criterion(b_logits.view(-1, vocab_size), y_reverse.view(-1))
+            total_loss = f_loss + b_loss
+            total_loss.backward()
+            train_loss += total_loss.item()
             train_step += 1
             optimizer.step()
 

@@ -36,8 +36,8 @@ class CharELMo(nn.Module):
 #====================================================
     def __init__(self,
                  vocab_size: int,
-                 embed_size: int = 512,
-                 hidden_size: int = 512,
+                 embed_size: int = 2048,
+                 hidden_size: int = 4096,
                  dropout_rate: float = 0.1,
                  max_seq_len: int = 128
                  ):
@@ -52,14 +52,14 @@ class CharELMo(nn.Module):
         self.embedding = nn.Embedding(vocab_size, embed_size) # [batch, seq_len, embed_dim]
 
         # Highway Netwrok
-        self.highway = Highway(num_layers=2, size=512, f=nn.ReLU())
+        self.highway = Highway(num_layers=2, size=embed_size, f=nn.ReLU())
 
         # biLM
-        self.forward_lm = nn.LSTM(input_size=embed_size, hidden_size=hidden_size,
-                                  batch_first=True, bidirectional=False, num_layers=2)
+        self.forward_lm = nn.LSTM(input_size=embed_size, hidden_size=hidden_size//2,
+                                  batch_first=True, bidirectional=True, num_layers=2)
 
-        self.backward_lm = nn.LSTM(input_size=embed_size, hidden_size=hidden_size,
-                                   batch_first=True, bidirectional=False, num_layers=2)
+        self.backward_lm = nn.LSTM(input_size=embed_size, hidden_size=hidden_size//2,
+                                   batch_first=True, bidirectional=True, num_layers=2)
 
         # dropout
         self.dropout = nn.Dropout(dropout_rate)

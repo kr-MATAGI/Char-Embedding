@@ -190,6 +190,7 @@ if "__main__" == __name__:
 
     train_datasets = ELMoDatasets(train_sents, char_dic, vocab_size)
     dev_datasets = ELMoDatasets(dev_sents, char_dic, vocab_size)
+    test_datasets = ELMoDatasets(test_sents, char_dic, vocab_size)
 
     # Config
     total_epoch = 20

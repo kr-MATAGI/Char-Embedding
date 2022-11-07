@@ -59,6 +59,8 @@ class CharCNN(nn.Module):
             nn.Dropout(self.drop_prob)
         )
 
+        self.log_softmax = nn.LogSoftmax()
+
     def forward(self, x):
         '''
             x : [batch_size, seq_len * 3, vocab_size]
@@ -71,8 +73,8 @@ class CharCNN(nn.Module):
         x = self.conv4(x)
 
         # Fully-Connected
-        x_shape = x.shape
-        x = self.fc1(x.view(x_shape[0], -1))
+        x = self.fc1(x.view(x.size(0), -1))
         x = self.fc2(x)
+        x = self.log_softmax(x)
 
         return x

@@ -13,13 +13,13 @@ from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampl
 from typing import List, Dict
 from model import CharELMo
 from tqdm import tqdm
-
-
-from ELMo import ELMo
+import copy
 
 ### GLOBAL
-best_ppl = math.inf
-ppl_scores = [] # (epoch_, ppl)
+g_best_ppl = math.inf
+g_best_loss = math.inf
+g_best_epoch = -1
+g_best_model = None
 
 #======================================================
 class ELMoDatasets(Dataset):
@@ -152,10 +152,11 @@ def load_sentences_datasets(src_path: str) -> List[str]:
     return train_sents, dev_sents, test_sents
 
 #======================================================
-def evaluate(model, eval_datasets, device, batch_size: int = 128):
+def evaluate(model, eval_datasets, device, epoch, batch_size: int = 128):
 #======================================================
     eval_loss = 0.0
     nb_eval_steps = 0
+    perplexity = 0.0
 
     eval_sampler = SequentialSampler(eval_datasets)
     eval_dataloader = DataLoader(eval_datasets, sampler=eval_sampler, batch_size=batch_size)
@@ -183,6 +184,10 @@ def evaluate(model, eval_datasets, device, batch_size: int = 128):
             for r_idx, res in enumerate(results):
                 predict_str = "".join([char_set[x] for x in res])
                 print(f"{r_idx}: \n {predict_str}")
+
+    global g_best_model, g_best_loss, g_best_ppl, g_best_epoch
+    if g_best_loss > eval_loss and g_best_ppl > g_best_ppl:
+        g_best_model = copy.deepcopy(model.state_dict())
 
 ### Main ###
 if "__main__" == __name__:
@@ -240,5 +245,12 @@ if "__main__" == __name__:
 
             train_pbar.set_description("Train Loss - %.04f" % (train_loss / train_step))
 
+        # Svae Model
+        torch.save(model.state_dict(), "./"+str(epoch+1)+"_model.pth")
+
         # Eval
-        evaluate(model, dev_datasets, device, batch_size=128)
+        evaluate(model, dev_datasets, device, epoch=epoch+1, batch_size=128)
+
+    # Save Best Model
+    print("Best Model epoch: ", g_best_epoch, "loss: ", g_best_loss, "ppl: ", g_best_ppl)
+    torch.save(g_best_model, "./best_model.pth")

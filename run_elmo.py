@@ -174,7 +174,7 @@ def evaluate(model, eval_datasets, device, batch_size: int = 128):
             b_loss = criterion(b_logits.view(-1, vocab_size), y_reverse.view(-1))
             eval_loss += f_loss.mean().item() + b_loss.mean().item()
             nb_eval_steps += 1
-            perplexity = torch.exp(loss).item()
+            perplexity = torch.exp(f_loss + b_loss).item()
             eval_pbar.set_description("Eval Loss - %.04f, PPL: %.04f" % ((eval_loss / nb_eval_steps), perplexity))
 
             results = outputs.argmax(dim=-1)
@@ -199,7 +199,7 @@ if "__main__" == __name__:
 
     # Config
     total_epoch = 20
-    learning_rate = 1e-3
+    learning_rate = 1e-5
     # filters = [[1, 32], [2, 32], [3, 64], [4, 128], [5, 256], [6, 512], [7, 1024]]
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print("[__main__] Device:", device, torch.cuda.is_available())

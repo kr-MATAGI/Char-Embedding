@@ -101,6 +101,3 @@ class CharELMo(nn.Module):
             backward_concat = torch.concat([f_lm_out_2, b_lm_out_2], dim=-1)
 
             return char_embed, forward_concat, backward_concat
-
-        # logits = self.classifier(concat_out)
-        # return logits

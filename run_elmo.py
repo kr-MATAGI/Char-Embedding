@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import re
+import os
 
 import copy
 import numpy as np
@@ -19,7 +20,7 @@ import copy
 g_best_ppl = math.inf
 g_best_loss = math.inf
 g_best_epoch = -1
-g_best_model = None
+g_test_mode = False
 
 #======================================================
 class ELMoDatasets(Dataset):
@@ -41,15 +42,12 @@ class ELMoDatasets(Dataset):
     def __getitem__(self, idx):
         X = []
         y = []
-        valid_seq_len = []
         for c_idx in range(0, len(self.sentences[idx]) - 1):
             X.append(char_dic[self.sentences[idx][c_idx]])
             y.append(char_dic[self.sentences[idx][c_idx+1]])
 
         y.append(char_dic["[BOS]"])
         y_reverse = list(reversed(y))
-        valid_seq_len.append(len(X))
-        valid_seq_len = [l if l < self.seq_len else self.seq_len for l in valid_seq_len]
 
         if len(X) >= self.seq_len:
             X = X[:self.seq_len]
@@ -67,8 +65,7 @@ class ELMoDatasets(Dataset):
         y = torch.LongTensor(y)
         y_reverse = torch.LongTensor(y_reverse)
 
-        valid_seq_len = torch.IntTensor(valid_seq_len)
-        return X, y, y_reverse, valid_seq_len
+        return X, y, y_reverse
 
 #======================================================
 def kor_letter_from(letter):
@@ -115,7 +112,7 @@ def make_char_dict(sentences: List[str]):
             break
         char_set.append(add_ch)
 
-    char_set = list(set(char_set))
+    char_set = sorted(list(set(char_set)))
     # char_set.insert(1, "[CLS]")
     # char_set.insert(2, "[SEP]")
     char_set.insert(2, "[UNK]")
@@ -170,14 +167,14 @@ def evaluate(model, eval_datasets, device, epoch, batch_size: int = 128):
             y = y.to(device)
             y_reverse = y_reverse.to(device)
             valid_seq_len = valid_seq_len.to(device)
-            # f_logits, b_logits = model(X, valid_seq_len)
-            f_logits = model(X, valid_seq_len)
+            f_logits, b_logits = model(X, valid_seq_len)
+            # f_logits = model(X, valid_seq_len)
             f_loss = criterion(f_logits.view(-1, vocab_size), y.view(-1))
-            # b_loss = criterion(b_logits.view(-1, vocab_size), y_reverse.view(-1))
-            eval_loss += f_loss.mean().item() # + b_loss.mean().item()
+            b_loss = criterion(b_logits.view(-1, vocab_size), y_reverse.view(-1))
+            eval_loss += f_loss.mean().item() + b_loss.mean().item()
             nb_eval_steps += 1
-            # perplexity = torch.exp(f_loss + b_loss).item()
-            perplexity = torch.exp(f_loss).item()
+            perplexity = torch.exp(f_loss + b_loss).item()
+            # perplexity = torch.exp(f_loss).item()
             eval_pbar.set_description("Eval Loss - %.04f, PPL: %.04f" % ((eval_loss / nb_eval_steps), perplexity))
 
             results = f_logits.argmax(dim=-1)
@@ -185,9 +182,18 @@ def evaluate(model, eval_datasets, device, epoch, batch_size: int = 128):
                 predict_str = "".join([char_set[x] for x in res])
                 print(f"{r_idx}: \n {predict_str}")
 
-    global g_best_model, g_best_loss, g_best_ppl, g_best_epoch
-    if g_best_loss > eval_loss and g_best_ppl > g_best_ppl:
-        g_best_model = copy.deepcopy(model.state_dict())
+        # Write
+        global g_test_mode
+        if g_test_mode:
+            with open("./result_"+str(epoch)+".txt", mode="w") as test_res_file:
+                test_res_file.write("Epoch: "+str(epoch)+" : "+"Loss : "+str(eval_loss / nb_eval_steps) +
+                                    "PPL : "+str(perplexity)+"\n")
+
+    global g_best_loss, g_best_ppl, g_best_epoch
+    if g_best_loss > eval_loss / nb_eval_steps:
+        g_best_epoch = epoch
+        g_best_loss = eval_loss / nb_eval_steps
+        g_best_ppl = perplexity
 
 ### Main ###
 if "__main__" == __name__:
@@ -197,8 +203,11 @@ if "__main__" == __name__:
     train_sents, dev_sents, test_sents = load_sentences_datasets("./NIKL_ne_parsed.pkl")
     total_sents = train_sents + dev_sents + test_sents # List
     char_set, char_dic, vocab_size = make_char_dict(total_sents)
-    # x_one_hot = [np.eye(vocab_size)[x] for x in x_data]  # x 데이터는 원-핫 인코딩
     print("Vocab Size:", vocab_size)
+    # Save Char Vocab
+    with open("./char_elmo_vocab.pkl", mode="wb") as vocab_pkl:
+        pickle.dump(char_dic, vocab_pkl)
+        print(f"[run_elmo.py][__main__] Vocab Saved ! - len: {len(char_dic)}")
 
     train_datasets = ELMoDatasets(train_sents, char_dic, vocab_size)
     dev_datasets = ELMoDatasets(dev_sents, char_dic, vocab_size)
@@ -211,46 +220,60 @@ if "__main__" == __name__:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print("[__main__] Device:", device, torch.cuda.is_available())
 
-    model = CharELMo(vocab_size=vocab_size)
-    model.to(device)
+    if g_test_mode:
+        root_model_path = "./model"
+        saved_models = sorted(os.listdir(root_model_path))
+        print(f"model_list: {saved_models}")
+        for model_path in saved_models:
+            print(f"[__main__][test_mode] {model_path}")
+            test_model_epoch = int(model_path.split("_")[0])
+            model = CharELMo(vocab_size=vocab_size)
+            model.load_state_dict(torch.load(root_model_path+"/"+model_path, map_location=device))
+            model.to(device)
+            evaluate(model, eval_datasets=test_datasets,
+                     device=device, epoch=test_model_epoch, batch_size=128)
+            print(f"[__main__][test_mode] TEST END - {model_path}")
+    else:
+        model = CharELMo(vocab_size=vocab_size)
+        model.to(device)
 
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), learning_rate)
+        criterion = nn.CrossEntropyLoss()
+        optimizer = optim.Adam(model.parameters(), learning_rate)
 
-    # Train
-    train_loss = 0.0
-    train_step = 0
-    train_sampler = RandomSampler(train_datasets)
-    model.zero_grad()
-    for epoch in range(total_epoch):
-        model.train()
-        train_data_loader = DataLoader(train_datasets, sampler=train_sampler, batch_size=128)
-        train_pbar = tqdm(train_data_loader)
-        for batch_idx, samples in enumerate(train_pbar):
+        # Train
+        train_loss = 0.0
+        train_step = 0
+        train_sampler = RandomSampler(train_datasets)
+        model.zero_grad()
+        for epoch in range(total_epoch):
             model.train()
-            X, y, y_reverse, valid_seq_len = samples
-            X = X.to(device)
-            y = y.to(device)
-            y_reverse = y_reverse.to(device)
-            valid_seq_len = valid_seq_len.to(device)
-            # f_logits, b_logits = model(X, valid_seq_len)
-            f_logits = model(X, valid_seq_len)
-            f_loss = criterion(f_logits.view(-1, vocab_size), y.view(-1))
-            # b_loss = criterion(b_logits.view(-1, vocab_size), y_reverse.view(-1))
-            total_loss = f_loss #+ b_loss
-            total_loss.backward()
-            train_loss += total_loss.item()
-            train_step += 1
-            optimizer.step()
+            train_data_loader = DataLoader(train_datasets, sampler=train_sampler, batch_size=128)
+            train_pbar = tqdm(train_data_loader)
+            for batch_idx, samples in enumerate(train_pbar):
+                model.train()
+                X, y, y_reverse = samples
+                X = X.to(device)
+                y = y.to(device)
+                y_reverse = y_reverse.to(device)
+                f_logits, b_logits = model(X)
+                # f_logits = model(X, valid_seq_len)
+                f_loss = criterion(f_logits.view(-1, vocab_size), y.view(-1))
+                b_loss = criterion(b_logits.view(-1, vocab_size), y_reverse.view(-1))
+                total_loss = f_loss + b_loss
+                total_loss.backward()
+                train_loss += total_loss.item()
+                train_step += 1
+                optimizer.step()
 
-            train_pbar.set_description("Train Loss - %.04f" % (train_loss / train_step))
+                train_pbar.set_description("Train Loss - %.04f" % (train_loss / train_step))
+            # end loop, batch
 
-        # Svae Model
-        torch.save(model.state_dict(), "./"+str(epoch+1)+"_model.pth")
+            # Eval
+            evaluate(model, test_datasets, device, epoch=epoch+1, batch_size=128)
 
-        # Eval
-        evaluate(model, dev_datasets, device, epoch=epoch+1, batch_size=128)
+            # Save Model
+            torch.save(model.state_dict(), "./model/" + str(epoch + 1) + "_model.pth")
 
-    # Save Best Model
-    print("Best Model epoch: ", g_best_epoch, "loss: ", g_best_loss, "ppl: ", g_best_ppl)
-    torch.save(g_best_model, "./best_model.pth")
+        # Save Best Model
+        print("Best Model epoch: ", g_best_epoch, "loss: ", g_best_loss, "ppl: ", g_best_ppl)
+        # torch.save(g_best_model, "./best_model.pth")

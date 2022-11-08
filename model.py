@@ -1,6 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from collections import OrderedDict
+
+'''
+    pad_packed, pack_padded 쓰면 [PAD] 처리 못 함
+'''
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 #====================================================
@@ -39,66 +44,63 @@ class CharELMo(nn.Module):
                  embed_size: int = 1024,
                  hidden_size: int = 768,
                  dropout_rate: float = 0.1,
-                 max_seq_len: int = 128
+                 max_seq_len: int = 128,
+                 mode: str = "train" # or "repr"
                  ):
         super(CharELMo, self).__init__()
 
         # Init
         self.vocab_size = vocab_size
         self.max_seq_len = max_seq_len
+        self.dropout_rate = dropout_rate
+        self.mode = mode
 
         # Char Embedding
         # 문자 단위로 이루어진 문장
         self.embedding = nn.Embedding(vocab_size, embed_size) # [batch, seq_len, embed_dim]
 
-        # Highway Netwrok
-        self.highway = Highway(num_layers=2, size=embed_size, f=nn.ReLU())
+        # BiLM
+        self.forward_lm_1 = nn.LSTM(input_size=embed_size, hidden_size=hidden_size//2,
+                                    batch_first=True, bidirectional=True, num_layers=1, dropout=self.dropout_rate)
+        self.forward_lm_2 = nn.LSTM(input_size=hidden_size, hidden_size=hidden_size//2,
+                                    batch_first=True, bidirectional=True, num_layers=1, dropout=self.dropout_rate)
 
-        # biLM
-        self.forward_lm = nn.LSTM(input_size=embed_size, hidden_size=hidden_size//2,
-                                  batch_first=True, bidirectional=True, num_layers=2)
-
-        self.backward_lm = nn.LSTM(input_size=embed_size, hidden_size=hidden_size//2,
-                                   batch_first=True, bidirectional=True, num_layers=2)
-
-        # dropout
-        self.dropout = nn.Dropout(dropout_rate)
+        self.backward_lm_1 = nn.LSTM(input_size=embed_size, hidden_size=hidden_size//2,
+                                     batch_first=True, bidirectional=True, num_layers=1, dropout=self.dropout_rate)
+        self.backward_lm_2 = nn.LSTM(input_size=hidden_size, hidden_size=hidden_size//2,
+                                     batch_first=True, bidirectional=True, num_layers=1, dropout=self.dropout_rate)
 
         # Softmax + FFN
-        # self.f_classifier = nn.Linear(hidden_size, vocab_size)
-        # self.b_classifier = nn.Linear(hidden_size, vocab_size)
-        self.classifier = nn.Linear(hidden_size * 2, vocab_size)
+        self.f_classifier = nn.Linear(hidden_size, vocab_size)
+        self.b_classifier = nn.Linear(hidden_size, vocab_size)
 
-    def forward(self, x: torch.Tensor, seq_len: torch.Tensor):
+    def forward(self, x: torch.Tensor):
         char_embed = self.embedding(x) # [batch_size, seq_len(char)]
-        # char_embed = self.highway(char_embed)
-
         reverse_char_embed = char_embed.flip(dims=[0, 1])
-        input_len, sorted_idx = seq_len.sort(0, descending=True)
-        input_len = input_len.squeeze(1)
-        # input_seq2idx = seq_len[sorted_idx]
 
-        packed_char_emb = pack_padded_sequence(char_embed, input_len.tolist(), batch_first=True)
-        packed_reverse_char_embed = pack_padded_sequence(reverse_char_embed, input_len.tolist(), batch_first=True)
+        # F_BiLSTM - 1
+        f_lm_out_1, (f_h_1, f_c_1) = self.forward_lm_1(char_embed)
 
-        # BiLSTM - 1
-        f_lm_out, f_h = self.forward_lm(packed_char_emb)
-        f_lm_out, f_lm_out_len = pad_packed_sequence(f_lm_out, batch_first=True,
-                                                     padding_value=0, total_length=self.max_seq_len)
-        f_lm_out = self.dropout(f_lm_out)
+        # F_BiLSTM - 2
+        f_lm_out_2, (f_h_2, f_c_2) = self.forward_lm_2(f_lm_out_1, (f_h_1, f_c_1))
 
-        b_lm_out, b_h = self.backward_lm(packed_reverse_char_embed)
-        b_lm_out, b_lm_out_len = pad_packed_sequence(b_lm_out, batch_first=True,
-                                                     padding_value=0, total_length=self.max_seq_len)
-        b_lm_out = self.dropout(b_lm_out)
-        # concat_out = torch.concat([char_embed, f_lm_out, b_lm_out], -1)
-        concat_out = torch.concat([f_lm_out, b_lm_out], -1)
+        # B_BiLSTM - 1
+        b_lm_out_1, (b_h_1, b_c_1) = self.backward_lm_1(reverse_char_embed)
 
-        # Softmax + FFN
-        # f_logits = self.f_classifier(f_lm_out)
-        # b_logits = self.b_classifier(b_lm_out)
-        #
-        # return f_logits, b_logits
+        # B_BiLSTM - 2
+        b_lm_out_2, (b_h_2, b_c_2) = self.backward_lm_2(b_lm_out_1, (b_h_1, b_c_1))
 
-        logits = self.classifier(concat_out)
-        return logits
+        if "train" == self.mode:
+            # Softmax + FFN
+            f_logits = self.f_classifier(f_lm_out_2) # [batch_size, seq_len, vocab_size]
+            b_logits = self.b_classifier(b_lm_out_2)
+
+            return f_logits, b_logits
+        else:
+            forward_concat = torch.concat([f_lm_out_1, b_lm_out_1], dim=-1)
+            backward_concat = torch.concat([f_lm_out_2, b_lm_out_2], dim=-1)
+
+            return char_embed, forward_concat, backward_concat
+
+        # logits = self.classifier(concat_out)
+        # return logits
